@@ -319,7 +319,7 @@ def render_tab_content(tab_name):
             ], style={'padding': '20px', 'background': '#f8fafc', 'borderRadius': '8px', 'border': '1px solid #e2e8f0',
                       'marginBottom': '15px'}),
 
-            # 增加对齐容器，确保 dcc.Graph 完全居中
+            # 居中容器，无边框与遮挡
             html.Div([
                 dcc.Graph(
                     id='interactive-globe-graph',
@@ -378,7 +378,7 @@ def render_tab_content(tab_name):
         ])
 
 
-# ==================== 4. 动态地球逻辑（修正居中与缩放） ====================
+# ==================== 4. 动态地球逻辑（修复居中、平移与边框） ====================
 @app.callback(
     [Output('interactive-globe-graph', 'figure'),
      Output('year-display-banner', 'children')],
@@ -387,7 +387,7 @@ def render_tab_content(tab_name):
 def update_globe(selected_year):
     fig = go.Figure()
 
-    # 底图
+    # 透明底图层
     fig.add_trace(go.Choropleth(
         locations=["USA"], z=[0], colorscale=[[0, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0)']],
         showscale=False, geo='geo', hoverinfo='none'
@@ -404,13 +404,13 @@ def update_globe(selected_year):
 
     active_countries = df_dest[df_dest["start_year"] <= selected_year]
 
-    # 视角追踪逻辑：自动计算最新的活跃国家作为地球焦点
-    center_lat, center_lon = start_pt["lat"], start_pt["lon"]
+    # 视角旋转经纬度设定（使用 rotation 代替 center，防止球体偏移与裁剪）
+    rot_lat, rot_lon = start_pt["lat"], start_pt["lon"]
     if not active_countries.empty:
         latest_country = active_countries.iloc[-1]
-        center_lat, center_lon = latest_country["lat"], latest_country["lon"]
+        rot_lat, rot_lon = latest_country["lat"], latest_country["lon"]
 
-    # 仅绘制起点到主节点的全球路线
+    # 绘制线路与国家节点
     for _, row in active_countries.iterrows():
         mlons, mlats = get_great_circle_points(start_pt["lat"], start_pt["lon"], row["lat"], row["lon"])
         fig.add_trace(go.Scattergeo(
@@ -425,22 +425,26 @@ def update_globe(selected_year):
             marker=dict(size=9, color=row["color"]), hoverinfo='none'
         ))
 
-    # 配置 3D 地球镜头跟随（关键修正：缩放与内边距缓冲）
+    # 正确配置 3D 地球视角与无边框布局
     fig.update_layout(
-        template='plotly_white',
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
         showlegend=False,
         geo=dict(
             scope='world',
-            projection_type='orthographic',
+            projection=dict(
+                type='orthographic',
+                rotation=dict(lon=rot_lon, lat=rot_lat, roll=0)
+            ),
             showland=True, landcolor='#f1f5f9',
             showocean=True, oceancolor='#e0f2fe',
             showcountries=True, countrycolor='#cbd5e1',
-            center=dict(lat=center_lat, lon=center_lon),
-            projection_scale=0.85,  # 适度减小缩放比例，防止球体和标签超出边界
-            domain=dict(x=[0, 1], y=[0, 1])  # 明确指定画布全图域
+            showframe=False,  # 隐藏图表正方形框线
+            framecolor='rgba(0,0,0,0)',
+            bgcolor='rgba(0,0,0,0)'
         ),
-        margin=dict(l=20, r=20, t=20, b=20),  # 预留外边距缓冲，解决文字/球面裁剪
-        uirevision=selected_year
+        margin=dict(l=0, r=0, t=0, b=0),  # 消除画布内边距边框
+        uirevision='dataset'  # 保持拖拽视角不被强行重置
     )
     return fig, f"🌍 Current Timeline Focus Year: {selected_year}"
 
